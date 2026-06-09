@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Secrets Scanner — Detect hardcoded credentials</title>
+<meta name="description" content="Paste code or upload a file to detect hardcoded API keys, passwords, tokens, and high-entropy strings.">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #1a1a1a; --surface: #222; --card: #282828; --card-h: #2f2f2f;
+    --border: rgba(255,255,255,.08); --text: #f0f0f0; --muted: #888;
+    --orange: #ff6b35; --og: rgba(255,107,53,.15);
+    --crit: #ff3b30; --high: #ff6700; --med: #ff9500; --low: #34c759;
+  }
+  body {
+    font-family: -apple-system, "Helvetica Neue", Arial, sans-serif;
+    background: var(--bg); color: var(--text);
+    -webkit-font-smoothing: antialiased; min-height: 100vh;
+  }
+
+  /* ── Header ── */
+  header {
+    border-bottom: 1px solid var(--border);
+    padding: 1.1rem 2rem;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .logo { font-size: 1.05rem; font-weight: 800; letter-spacing: -.02em; text-decoration: none; color: var(--text); }
+  .logo b { color: var(--orange); }
+  .gh-link {
+    font-size: .75rem; font-weight: 600; text-transform: uppercase;
+    letter-spacing: .08em; color: var(--muted); text-decoration: none;
+    transition: color .2s;
+  }
+  .gh-link:hover { color: var(--orange); }
+
+  /* ── Main layout ── */
+  main { max-width: 860px; margin: 0 auto; padding: 3.5rem 1.5rem 5rem; }
+
+  .hero { text-align: center; margin-bottom: 3rem; }
+  .hero h1 {
+    font-size: clamp(1.8rem, 4vw, 2.8rem); font-weight: 800;
+    letter-spacing: -.04em; line-height: 1.1; margin-bottom: .75rem;
+  }
+  .hero h1 span { color: var(--orange); }
+  .hero p { font-size: .95rem; color: var(--muted); line-height: 1.7; max-width: 520px; margin: 0 auto; }
+  .pills {
+    display: flex; gap: .5rem; justify-content: center;
+    flex-wrap: wrap; margin-top: 1.1rem;
+  }
+  .pill {
+    font-size: .65rem; font-weight: 700; text-transform: uppercase;
+    letter-spacing: .06em; padding: .22rem .7rem; border-radius: 20px;
+    border: 1px solid var(--border); color: var(--muted);
+  }
+
+  /* ── Input card ── */
+  .input-card {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 12px; overflow: hidden;
+  }
+
+  /* Tabs */
+  .tabs { display: flex; border-bottom: 1px solid var(--border); }
+  .tab {
+    flex: 1; padding: .9rem 1rem; font-size: .8rem; font-weight: 600;
+    letter-spacing: .04em; text-transform: uppercase; text-align: center;
+    cursor: pointer; color: var(--muted); border: none;
+    background: transparent; border-bottom: 2px solid transparent;
+    transition: color .2s, border-color .2s;
+  }
+  .tab.active { color: var(--orange); border-bottom-color: var(--orange); }
+  .tab-panel { display: none; padding: 1.5rem; }
+  .tab-panel.active { display: block; }
+
+  /* Textarea */
+  textarea {
+    width: 100%; min-height: 220px; resize: vertical;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 8px; padding: .9rem 1rem; color: var(--text);
+    font-family: "SF Mono", Menlo, Monaco, Consolas, monospace;
+    font-size: .82rem; line-height: 1.6;
+    transition: border-color .2s; outline: none;
+  }
+  textarea:focus { border-color: rgba(255,107,53,.4); }
+  textarea::placeholder { color: var(--muted); }
+
+  .row { display: flex; gap: .75rem; margin-top: .85rem; align-items: center; }
+
+  /* Sample button */
+  .sample-btn {
+    font-size: .75rem; font-weight: 600; letter-spacing: .04em;
+    text-transform: uppercase; color: var(--muted); background: transparent;
+    border: 1px solid var(--border); border-radius: 4px;
+    padding: .55rem 1.1rem; cursor: pointer; transition: border-color .2s, color .2s;
+    white-space: nowrap;
+  }
+  .sample-btn:hover { border-color: var(--orange); color: var(--orange); }
+
+  /* Drop zone */
+  .drop-zone {
+    border: 2px dashed var(--border); border-radius: 10px;
+    padding: 2.5rem 1.5rem; text-align: center; cursor: pointer;
+    transition: border-color .25s, background .25s;
+  }
+  .drop-zone.over, .drop-zone:hover { border-color: var(--orange); background: rgba(255,107,53,.04); }
+  .drop-zone input[type=file] { display: none; }
+  .drop-zone p { font-size: .88rem; color: var(--muted); margin-top: .5rem; }
+  .drop-zone strong { font-size: 1rem; color: var(--text); }
+  .drop-zone .dz-icon { font-size: 2.2rem; margin-bottom: .4rem; }
+  #file-name { font-size: .78rem; color: var(--orange); margin-top: .65rem; }
+
+  /* Scan button */
+  .scan-btn {
+    width: 100%; margin-top: 1rem; padding: .9rem;
+    background: var(--orange); color: #fff; border: none;
+    border-radius: 6px; font-size: .9rem; font-weight: 700;
+    letter-spacing: .05em; text-transform: uppercase; cursor: pointer;
+    transition: background .2s, transform .2s, box-shadow .2s;
+    box-shadow: 0 4px 20px rgba(255,107,53,.3);
+  }
+  .scan-btn:hover { background: #e55a22; transform: translateY(-1px); box-shadow: 0 10px 28px rgba(255,107,53,.38); }
+  .scan-btn:active { transform: translateY(0); }
+  .scan-btn:disabled { background: #555; box-shadow: none; transform: none; cursor: not-allowed; }
+
+  /* ── Results ── */
+  #results { margin-top: 2.5rem; display: none; }
+
+  .res-header { margin-bottom: 1.25rem; }
+  .res-label { font-size: .7rem; font-weight: 700; text-transform: uppercase; letter-spacing: .12em; color: var(--muted); margin-bottom: .3rem; }
+  .res-title { font-size: 1.3rem; font-weight: 800; letter-spacing: -.03em; }
+  .res-title.clean { color: var(--low); }
+  .res-title.dirty { color: var(--text); }
+
+  .kpis { display: flex; gap: .6rem; flex-wrap: wrap; margin: 1.1rem 0; }
+  .kpi {
+    flex: 1; min-width: 90px; background: var(--card); border: 1px solid var(--border);
+    border-radius: 8px; padding: .75rem 1rem; text-align: center;
+  }
+  .kpi .kv { font-size: 1.8rem; font-weight: 800; letter-spacing: -.04em; line-height: 1; }
+  .kpi .kl { font-size: .65rem; font-weight: 600; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin-top: .25rem; }
+  .kpi.vc .kv { color: var(--crit); }
+  .kpi.vh .kv { color: var(--high); }
+  .kpi.vm .kv { color: var(--med); }
+  .kpi.vl .kv { color: var(--low); }
+
+  /* Finding list */
+  .findings { display: flex; flex-direction: column; gap: 6px; }
+  .finding {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 8px; padding: .9rem 1.1rem;
+    display: grid; grid-template-columns: auto 1fr auto;
+    align-items: center; gap: 1rem;
+    transition: border-color .2s;
+  }
+  .finding:hover { border-color: rgba(255,107,53,.2); }
+  .finding.critical { border-left: 3px solid var(--crit); }
+  .finding.high     { border-left: 3px solid var(--high); }
+  .finding.medium   { border-left: 3px solid var(--med);  }
+  .finding.low      { border-left: 3px solid var(--low);  }
+
+  .badge {
+    font-size: .62rem; font-weight: 700; text-transform: uppercase;
+    letter-spacing: .05em; padding: .2rem .6rem; border-radius: 20px; color: #fff;
+    white-space: nowrap;
+  }
+  .badge.critical { background: var(--crit); }
+  .badge.high     { background: var(--high); }
+  .badge.medium   { background: var(--med); }
+  .badge.low      { background: var(--low); }
+
+  .finding-body { min-width: 0; }
+  .finding-type { font-size: .9rem; font-weight: 700; letter-spacing: -.01em; margin-bottom: .18rem; }
+  .finding-loc  { font-size: .75rem; color: var(--muted); }
+  .finding-loc code {
+    font-family: "SF Mono", Menlo, Monaco, Consolas, monospace;
+    font-size: .78em; background: var(--surface);
+    padding: .08em .4em; border-radius: 4px; color: var(--muted);
+  }
+  .finding-right { text-align: right; }
+  .finding-val {
+    font-family: "SF Mono", Menlo, Monaco, Consolas, monospace;
+    font-size: .75rem; background: var(--surface);
+    padding: .25rem .65rem; border-radius: 5px; color: var(--orange);
+    white-space: nowrap; display: inline-block; max-width: 180px;
+    overflow: hidden; text-overflow: ellipsis;
+  }
+  .finding-ent { font-size: .68rem; color: var(--muted); margin-top: .25rem; }
+
+  .clean-msg {
+    text-align: center; padding: 2.5rem;
+    background: var(--card); border: 1px solid rgba(52,199,89,.2);
+    border-radius: 10px;
+  }
+  .clean-msg .icon { font-size: 2.5rem; }
+  .clean-msg p { font-size: .9rem; color: var(--muted); margin-top: .5rem; }
+
+  /* loading pulse on card border */
+  @keyframes pulse { 0%,100%{border-color:var(--border)} 50%{border-color:rgba(255,107,53,.5)} }
+  .input-card.scanning { animation: pulse .9s ease infinite; }
+
+  @media(max-width:560px) {
+    .finding { grid-template-columns: auto 1fr; }
+    .finding-right { display: none; }
+    .kpi { min-width: 70px; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <a class="logo" href="/">Secrets<b>Scanner</b></a>
+  <a class="gh-link" href="https://github.com/Kartik0219/secrets-scanner" target="_blank" rel="noopener">
+    GitHub ↗
+  </a>
+</header>
+
+<main>
+  <div class="hero">
+    <h1>Find secrets <span>before attackers do</span></h1>
+    <p>Paste code or upload a file to detect hardcoded API keys, passwords,
+       tokens, and high-entropy strings instantly.</p>
+    <div class="pills">
+      <span class="pill">18 pattern types</span>
+      <span class="pill">Shannon entropy analysis</span>
+      <span class="pill">ZIP support</span>
+      <span class="pill">Never stores your code</span>
+    </div>
+  </div>
+
+  <div class="input-card" id="input-card">
+    <div class="tabs">
+      <button class="tab active" data-tab="paste" onclick="switchTab('paste', this)">Paste Code</button>
+      <button class="tab"        data-tab="upload" onclick="switchTab('upload', this)">Upload File</button>
+    </div>
+
+    <!-- Paste tab -->
+    <div class="tab-panel active" id="tab-paste">
+      <textarea id="code" placeholder="Paste your code here…" spellcheck="false"></textarea>
+      <div class="row">
+        <button class="sample-btn" onclick="loadSample()">Load Sample</button>
+        <span style="font-size:.75rem;color:var(--muted)">Try with intentionally leaked fake credentials</span>
+      </div>
+      <button class="scan-btn" id="scan-paste" onclick="runScan('paste')">Scan for Secrets</button>
+    </div>
+
+    <!-- Upload tab -->
+    <div class="tab-panel" id="tab-upload">
+      <div class="drop-zone" id="drop-zone" onclick="document.getElementById('file-input').click()">
+        <input type="file" id="file-input"
+               accept=".py,.js,.ts,.jsx,.tsx,.env,.sh,.yaml,.yml,.json,.toml,.txt,.zip,.rb,.go,.java,.php,.cs,.cpp,.c,.h">
+        <div class="dz-icon">📂</div>
+        <strong>Drop a file here or click to browse</strong>
+        <p>.py .js .ts .env .yaml .json .zip and more · max 2 MB</p>
+        <div id="file-name"></div>
+      </div>
+      <button class="scan-btn" id="scan-upload" onclick="runScan('upload')">Scan for Secrets</button>
+    </div>
+  </div>
+
+  <!-- Results -->
+  <div id="results">
+    <div class="res-header">
+      <div class="res-label" id="res-label"></div>
+      <div class="res-title" id="res-title"></div>
+    </div>
+    <div class="kpis" id="kpis"></div>
+    <div class="findings" id="findings-list"></div>
+  </div>
+</main>
+
+<script>
+  // ── Tab switching ──
+  function switchTab(name, btn) {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('tab-' + name).classList.add('active');
+  }
+
+  // ── File drop zone ──
+  const dz = document.getElementById('drop-zone');
+  const fi = document.getElementById('file-input');
+  dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('over'); });
+  dz.addEventListener('dragleave', () => dz.classList.remove('over'));
+  dz.addEventListener('drop', e => {
+    e.preventDefault(); dz.classList.remove('over');
+    if (e.dataTransfer.files[0]) { fi.files = e.dataTransfer.files; updateFileName(); }
+  });
+  fi.addEventListener('change', updateFileName);
+  function updateFileName() {
+    const f = fi.files[0];
+    document.getElementById('file-name').textContent = f ? '✓ ' + f.name : '';
+  }
+
+  // ── Sample code (built from parts — no literal secrets in source) ──
+  function loadSample() {
+    const a = 'AKIA', b = 'IOSFODNN7EXAMPLE';
+    const c = 'ghp_', d = 'A'.repeat(36);
+    const e = 'sk_live_', f = 'X'.repeat(28);
+    const g = 'password', h = 'SuperSecret123!';
+    const i = 'postgres://admin:', j = 'dbpass99@prod.db.example.com/app';
+    const sample = [
+      '# config.py — DEMO with intentionally fake credentials',
+      'import os',
+      '',
+      '# Hardcoded AWS credentials (never do this!)',
+      `AWS_ACCESS_KEY_ID = "${a+b}"`,
+      '',
+      '# GitHub personal access token in source',
+      `GITHUB_TOKEN = "${c+d}"`,
+      '',
+      '# Stripe live key',
+      `STRIPE_SECRET = "${e+f}"`,
+      '',
+      '# Hardcoded database password',
+      `${g} = '${h}'`,
+      '',
+      '# Database URL with credentials',
+      `DATABASE_URL = "${i+j}"`,
+    ].join('\n');
+    document.getElementById('code').value = sample;
+    switchTab('paste', document.querySelector('.tab[data-tab=paste]'));
+  }
+
+  // ── Scan ──
+  async function runScan(mode) {
+    const card = document.getElementById('input-card');
+    const btn  = document.getElementById('scan-' + mode);
+    btn.disabled = true;
+    btn.textContent = 'Scanning…';
+    card.classList.add('scanning');
+
+    const form = new FormData();
+    if (mode === 'paste') {
+      const code = document.getElementById('code').value.trim();
+      if (!code) { showError('Paste some code first.'); reset(btn, card); return; }
+      form.append('code', code);
+    } else {
+      const file = document.getElementById('file-input').files[0];
+      if (!file) { showError('Choose a file first.'); reset(btn, card); return; }
+      form.append('file', file);
+    }
+
+    try {
+      const res  = await fetch('/scan', { method: 'POST', body: form });
+      const data = await res.json();
+      if (!res.ok) { showError(data.error || 'Scan failed.'); }
+      else         { showResults(data); }
+    } catch {
+      showError('Network error — is the server running?');
+    }
+
+    reset(btn, card);
+  }
+
+  function reset(btn, card) {
+    btn.disabled = false;
+    btn.textContent = 'Scan for Secrets';
+    card.classList.remove('scanning');
+  }
+
+  // ── Render results ──
+  function showResults(data) {
+    const wrap = document.getElementById('results');
+    wrap.style.display = 'block';
+    wrap.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+    document.getElementById('res-label').textContent = 'Scanned: ' + data.scanned;
+
+    const title = document.getElementById('res-title');
+    if (data.total === 0) {
+      title.textContent = '✓ No secrets detected';
+      title.className = 'res-title clean';
+    } else {
+      title.textContent = `Found ${data.total} potential secret${data.total === 1 ? '' : 's'}`;
+      title.className = 'res-title dirty';
+    }
+
+    const c = data.counts;
+    document.getElementById('kpis').innerHTML = data.total === 0 ? '' : `
+      <div class="kpi vc"><div class="kv">${c.critical}</div><div class="kl">Critical</div></div>
+      <div class="kpi vh"><div class="kv">${c.high}</div><div class="kl">High</div></div>
+      <div class="kpi vm"><div class="kv">${c.medium}</div><div class="kl">Medium</div></div>
+      <div class="kpi vl"><div class="kv">${c.low}</div><div class="kl">Low</div></div>
+    `;
+
+    const list = document.getElementById('findings-list');
+    if (data.total === 0) {
+      list.innerHTML = `
+        <div class="clean-msg">
+          <div class="icon">🔒</div>
+          <strong style="color:var(--low)">All clear</strong>
+          <p>No hardcoded secrets or high-entropy strings found.</p>
+        </div>`;
+    } else {
+      list.innerHTML = data.findings.map(f => `
+        <div class="finding ${esc(f.severity)}">
+          <span class="badge ${esc(f.severity)}">${esc(f.severity)}</span>
+          <div class="finding-body">
+            <div class="finding-type">${esc(f.type)}</div>
+            <div class="finding-loc"><code>${esc(f.file)}</code> · line ${f.line}</div>
+          </div>
+          <div class="finding-right">
+            <div class="finding-val" title="${esc(f.redacted)}">${esc(f.redacted)}</div>
+            <div class="finding-ent">entropy ${f.entropy}</div>
+          </div>
+        </div>`).join('');
+    }
+  }
+
+  function showError(msg) {
+    const wrap = document.getElementById('results');
+    wrap.style.display = 'block';
+    wrap.innerHTML = `<div class="clean-msg" style="border-color:rgba(255,59,48,.3)">
+      <div class="icon">⚠️</div>
+      <strong style="color:var(--crit)">${esc(msg)}</strong>
+    </div>`;
+    wrap.scrollIntoView({ behavior: 'smooth' });
+  }
+
+  function esc(s) {
+    return String(s)
+      .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+      .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+</script>
+
+</body>
+</html>
